@@ -25,6 +25,10 @@ concurrency:
 env:
   UPSTREAM: wxxsfxyzm/InstallerX-Revived
   APP_ID: com.android.packageinstaller
+  # Added to upstream's versionCode (git commit count). Vendor installers carry their own
+  # versionCode (ColorOS 17: 17000001); when two system partitions ship the same package,
+  # PackageManager keeps the higher one, so ours has to outrank them.
+  VERSION_CODE_OFFSET: 1000000000
 
 jobs:
   build:
@@ -80,7 +84,7 @@ jobs:
         run: |
           set -euo pipefail
           # Upstream versionCode is the git commit count, so it only grows along main.
-          CODE=$(git -C upstream rev-list --count HEAD)
+          CODE=$(( VERSION_CODE_OFFSET + $(git -C upstream rev-list --count HEAD) ))
           LAST=$(jq -r '.versionCode // 0' update.json 2>/dev/null || echo 0)
           BUILD=true
           if [ "${FORCE:-false}" != "true" ] && [ "$CODE" -le "$LAST" ]; then
@@ -133,6 +137,10 @@ jobs:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
+          F=app/build.gradle.kts
+          grep -q 'versionCode = project.getGitCommitCount()' "$F" || { echo "versionCode line not found in $F"; exit 1; }
+          sed -i "s/versionCode = project.getGitCommitCount()/versionCode = ${VERSION_CODE_OFFSET} + project.getGitCommitCount()/" "$F"
           chmod +x ./gradlew
           ./gradlew "assemble${{ steps.up.outputs.flavor }}Release" -PAPP_ID="$APP_ID"
 

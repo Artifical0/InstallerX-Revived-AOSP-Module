@@ -20,7 +20,8 @@ The module id is `com.android.packageinstaller`, the same as the official AOSP m
 ## Notes
 
 - The APK is signed with this repo's key, not upstream's. Switching from the official module changes the system installer's signature once; after that it stays stable.
-- `versionCode` equals upstream's (git commit count), so updates never downgrade.
+- APK `versionCode` is `1000000000 + upstream's` (git commit count). It must outrank the vendor installer at the same package name (ColorOS 17 ships 17000001), otherwise PackageManager ignores this copy. Updates never downgrade.
+- Do not install a `com.android.packageinstaller` APK on top manually: a `/data` update with a higher versionCode hides the module's copy.
 - Builds are unmodified upstream source apart from the application id. Report app bugs upstream only if they reproduce with official builds.
 
 ## License
