@@ -203,22 +203,31 @@ jobs:
         run: |
           set -euo pipefail
           PRE=""; [ "$FLAVOR" = "Preview" ] && PRE="--prerelease"
-          NOTES="Built from upstream [$TAG](https://github.com/$UPSTREAM/releases/tag/$TAG) ($FLAVOR, versionCode $CODE).
-
-          Upstream changelog: https://github.com/$UPSTREAM/releases/tag/$TAG"
+          # Carry upstream's own release notes (shown on our Release page and in the root manager).
+          UPNOTES=$(gh api "repos/$UPSTREAM/releases/tags/$TAG" --jq '.body // ""' 2>/dev/null || true)
+          [ -n "$UPNOTES" ] || UPNOTES="(Upstream release has no notes.)"
+          # Make upstream's relative links and #PR refs resolve against the upstream repo.
+          UPNOTES=$(printf '%s\n' "$UPNOTES" | sed -E "s@\(#([0-9]+)\)@([#\1](https://github.com/$UPSTREAM/pull/\1))@g")
+          {
+            echo "## $TAG"
+            echo
+            echo "$FLAVOR build of upstream [$TAG](https://github.com/$UPSTREAM/releases/tag/$TAG), APK versionCode $CODE."
+            echo
+            echo "---"
+            echo
+            printf '%s\n' "$UPNOTES"
+          } > changelog.md
           gh release delete "$TAG" -R "$GITHUB_REPOSITORY" --yes --cleanup-tag 2>/dev/null || true
           gh release create "$TAG" -R "$GITHUB_REPOSITORY" --target main $PRE \
-            --title "InstallerX Revived $TAG" --notes "$NOTES" \
+            --title "InstallerX Revived $TAG" --notes-file changelog.md \
             "${{ steps.pack.outputs.zip }}"
 
           jq -n --arg v "$TAG" --argjson c "$CODE" \
             --arg z "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/${{ steps.pack.outputs.name }}" \
             --arg l "https://raw.githubusercontent.com/$GITHUB_REPOSITORY/main/changelog.md" \
             '{version: $v, versionCode: $c, zipUrl: $z, changelog: $l}' > update.json
-          printf '## %s\n\n%s build from upstream, versionCode %s.\n\nUpstream release notes: https://github.com/%s/releases/tag/%s\n' \
-            "$TAG" "$FLAVOR" "$CODE" "$UPSTREAM" "$TAG" > changelog.md
 
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add update.json changelog.md
-          git diff --cached --quiet || { git commit -m "Update to $TAG ($CODE)" && git push; }
+          git diff --cached --quiet || { git commit -m "Update to $TAG ($CODE)" && git pull --rebase && git push; }
