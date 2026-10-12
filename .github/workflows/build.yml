@@ -1,0 +1,216 @@
+name: Build module
+
+on:
+  schedule:
+    - cron: '17 */2 * * *'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Upstream tag to build (blank = newest upstream release, stable or preview)'
+        required: false
+        default: ''
+      force:
+        description: 'Rebuild even if this upstream release was already built'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  packages: read
+
+concurrency:
+  group: build-module
+  cancel-in-progress: false
+
+env:
+  UPSTREAM: wxxsfxyzm/InstallerX-Revived
+  APP_ID: com.android.packageinstaller
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout module repo
+        uses: actions/checkout@v7
+
+      - name: Resolve upstream release
+        id: up
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_REF: ${{ inputs.ref }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          if [ -n "${INPUT_REF:-}" ]; then
+            TAG="$INPUT_REF"
+          else
+            # Newest non-draft release by creation time, pre-releases included.
+            TAG=$(gh api "repos/$UPSTREAM/releases?per_page=20" \
+              --jq '[.[] | select(.draft | not)] | sort_by(.created_at) | last | .tag_name')
+          fi
+          [ -n "$TAG" ] && [ "$TAG" != "null" ] || { echo "No upstream release found"; exit 1; }
+
+          # Stable tags are plain numbers (26.09, 26.05.01); previews end with a commit hash.
+          if echo "$TAG" | grep -qE '^[0-9]+\.[0-9]+(\.[0-9]+)?$'; then FLAVOR=Stable; else FLAVOR=Preview; fi
+
+          SKIP=false
+          if [ "${FORCE:-false}" != "true" ] && gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG already built"
+            SKIP=true
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "flavor=$FLAVOR" >> "$GITHUB_OUTPUT"
+          echo "skip=$SKIP" >> "$GITHUB_OUTPUT"
+          echo "Upstream $TAG ($FLAVOR), skip=$SKIP"
+
+      - name: Checkout upstream
+        if: steps.up.outputs.skip != 'true'
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ env.UPSTREAM }}
+          ref: ${{ steps.up.outputs.tag }}
+          path: upstream
+          fetch-depth: 0
+
+      - name: Check version is newer
+        id: ver
+        if: steps.up.outputs.skip != 'true'
+        env:
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          # Upstream versionCode is the git commit count, so it only grows along main.
+          CODE=$(git -C upstream rev-list --count HEAD)
+          LAST=$(jq -r '.versionCode // 0' update.json 2>/dev/null || echo 0)
+          BUILD=true
+          if [ "${FORCE:-false}" != "true" ] && [ "$CODE" -le "$LAST" ]; then
+            echo "Upstream versionCode $CODE is not newer than published $LAST"
+            BUILD=false
+          fi
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "build=$BUILD" >> "$GITHUB_OUTPUT"
+
+      - name: Set up JDK 25
+        if: steps.ver.outputs.build == 'true'
+        uses: actions/setup-java@v6
+        with:
+          distribution: 'zulu'
+          java-version: '25'
+
+      - name: Setup Gradle
+        if: steps.ver.outputs.build == 'true'
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          build-scan-publish: false
+
+      - name: Set up signing key
+        if: steps.ver.outputs.build == 'true'
+        working-directory: upstream
+        env:
+          SIGNING_KEY_STORE_BASE64: ${{ secrets.SIGNING_KEY_STORE_BASE64 }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          # Refuse to fall back to a throwaway debug key: the signature must stay stable across updates.
+          for v in SIGNING_KEY_STORE_BASE64 SIGNING_STORE_PASSWORD SIGNING_KEY_ALIAS SIGNING_KEY_PASSWORD; do
+            [ -n "${!v:-}" ] || { echo "Missing secret $v"; exit 1; }
+          done
+          mkdir -p keystore
+          echo "$SIGNING_KEY_STORE_BASE64" | base64 --decode > keystore/module.jks
+          {
+            echo "storeFile=keystore/module.jks"
+            echo "keyAlias=$SIGNING_KEY_ALIAS"
+            echo "keyPassword=$SIGNING_KEY_PASSWORD"
+            echo "storePassword=$SIGNING_STORE_PASSWORD"
+          } > keystore.properties
+
+      - name: Build APK
+        if: steps.ver.outputs.build == 'true'
+        working-directory: upstream
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          chmod +x ./gradlew
+          ./gradlew "assemble${{ steps.up.outputs.flavor }}Release" -PAPP_ID="$APP_ID"
+
+      - name: Verify APK
+        id: apk
+        if: steps.ver.outputs.build == 'true'
+        run: |
+          set -euo pipefail
+          APK=$(find upstream/app/build/outputs/apk -path '*/release/*.apk' | head -n 1)
+          [ -n "$APK" ] || { ls -R upstream/app/build/outputs/apk; exit 1; }
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)
+          BADGING=$("$BT/aapt2" dump badging "$APK" | head -n 1)
+          echo "$BADGING"
+          echo "$BADGING" | grep -q "name='$APP_ID'" || { echo "Wrong package name"; exit 1; }
+          echo "$BADGING" | grep -q "versionCode='${{ steps.ver.outputs.code }}'" || { echo "Unexpected versionCode"; exit 1; }
+          "$BT/apksigner" verify --print-certs "$APK" | tee certs.txt
+          grep -q 'Android Debug' certs.txt && { echo "APK is debug-signed"; exit 1; }
+          echo "path=$APK" >> "$GITHUB_OUTPUT"
+
+      - name: Pack module
+        id: pack
+        if: steps.ver.outputs.build == 'true'
+        env:
+          TAG: ${{ steps.up.outputs.tag }}
+          CODE: ${{ steps.ver.outputs.code }}
+          FLAVOR: ${{ steps.up.outputs.flavor }}
+        run: |
+          set -euo pipefail
+          OUT=build/module
+          rm -rf build && mkdir -p build
+          cp -a module "$OUT"
+          DIR="$OUT/system/priv-app/PackageInstaller"
+          mkdir -p "$DIR/oat" "$DIR/lib"
+          # Hide any stock odex/libs at this path so they never pair with the replaced APK.
+          touch "$DIR/oat/.replace" "$DIR/lib/.replace"
+          cp "${{ steps.apk.outputs.path }}" "$DIR/PackageInstaller.apk"
+          cat > "$OUT/module.prop" <<EOF
+          id=com.android.packageinstaller
+          name=InstallerX Revived (System)
+          version=$TAG
+          versionCode=$CODE
+          author=wxxsfxyzm (app), ${GITHUB_REPOSITORY_OWNER} (module)
+          description=InstallerX Revived as system PackageInstaller (AOSP layout, $FLAVOR build, auto-synced from upstream)
+          updateJson=https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/update.json
+          EOF
+          sed -i 's/^ *//' "$OUT/module.prop"
+          ZIP="InstallerX-Revived-AOSP-$TAG.zip"
+          (cd "$OUT" && zip -r9 "../$ZIP" .)
+          unzip -l "build/$ZIP"
+          echo "zip=build/$ZIP" >> "$GITHUB_OUTPUT"
+          echo "name=$ZIP" >> "$GITHUB_OUTPUT"
+
+      - name: Publish release
+        if: steps.ver.outputs.build == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.up.outputs.tag }}
+          CODE: ${{ steps.ver.outputs.code }}
+          FLAVOR: ${{ steps.up.outputs.flavor }}
+        run: |
+          set -euo pipefail
+          PRE=""; [ "$FLAVOR" = "Preview" ] && PRE="--prerelease"
+          NOTES="Built from upstream [$TAG](https://github.com/$UPSTREAM/releases/tag/$TAG) ($FLAVOR, versionCode $CODE).
+
+          Upstream changelog: https://github.com/$UPSTREAM/releases/tag/$TAG"
+          gh release delete "$TAG" -R "$GITHUB_REPOSITORY" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" -R "$GITHUB_REPOSITORY" --target main $PRE \
+            --title "InstallerX Revived $TAG" --notes "$NOTES" \
+            "${{ steps.pack.outputs.zip }}"
+
+          jq -n --arg v "$TAG" --argjson c "$CODE" \
+            --arg z "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/${{ steps.pack.outputs.name }}" \
+            --arg l "https://raw.githubusercontent.com/$GITHUB_REPOSITORY/main/changelog.md" \
+            '{version: $v, versionCode: $c, zipUrl: $z, changelog: $l}' > update.json
+          printf '## %s\n\n%s build from upstream, versionCode %s.\n\nUpstream release notes: https://github.com/%s/releases/tag/%s\n' \
+            "$TAG" "$FLAVOR" "$CODE" "$UPSTREAM" "$TAG" > changelog.md
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add update.json changelog.md
+          git diff --cached --quiet || { git commit -m "Update to $TAG ($CODE)" && git push; }

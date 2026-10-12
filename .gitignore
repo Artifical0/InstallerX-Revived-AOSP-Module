@@ -1,0 +1,5 @@
+build/
+upstream/
+keystore/
+*.jks
+keystore.properties
