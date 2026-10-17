@@ -1,6 +1,6 @@
-## 26.10.cb9a24d
+## 26.10.4f3c04b
 
-Preview build of upstream [26.10.cb9a24d](https://github.com/wxxsfxyzm/InstallerX-Revived/releases/tag/26.10.cb9a24d), APK versionCode 1000001559.
+Preview build of upstream [26.10.4f3c04b](https://github.com/wxxsfxyzm/InstallerX-Revived/releases/tag/26.10.4f3c04b), APK versionCode 1000001571.
 
 ---
 
@@ -13,10 +13,10 @@ Preview build of upstream [26.10.cb9a24d](https://github.com/wxxsfxyzm/Installer
 - We appreciate any feedback!
 
 **更新日志（Changelog）:**
-- fix: Remove XZMemoryLimit ([#850](https://github.com/wxxsfxyzm/InstallerX-Revived/pull/850)) (AlexLiuDev233)
-- i18n: Translations update from Hosted Weblate ([#846](https://github.com/wxxsfxyzm/InstallerX-Revived/pull/846)) (Weblate (bot))
-- feat: support xz compression modules ([#848](https://github.com/wxxsfxyzm/InstallerX-Revived/pull/848)) (AlexLiuDev233)
-- refactor: separate wallpaper seed color from manual seed color ([#839](https://github.com/wxxsfxyzm/InstallerX-Revived/pull/839)) (布丁小才)
-- ci: upload mapping after build ([#845](https://github.com/wxxsfxyzm/InstallerX-Revived/pull/845)) (AlexLiuDev233)
+- i18n: Translations update from Hosted Weblate ([#854](https://github.com/wxxsfxyzm/InstallerX-Revived/pull/854)) (Weblate (bot))
+- feat: Add source stamp verification and bug fixes ([#867](https://github.com/wxxsfxyzm/InstallerX-Revived/pull/867)) (wxxsfxyzm)
+- feat: add CMF palette support for spec 2026 (wxxsfxyzm)
+- fix: cancel superseded branch ci runs (wxxsfxyzm)
+- fix: delete module source archives after successful installation (wxxsfxyzm)
 
-**Full Changelog:** [`26.09...26.10.cb9a24d`](https://github.com/wxxsfxyzm/InstallerX-Revived/compare/26.09...26.10.cb9a24d)
+**Full Changelog:** [`26.09...26.10.4f3c04b`](https://github.com/wxxsfxyzm/InstallerX-Revived/compare/26.09...26.10.4f3c04b)
