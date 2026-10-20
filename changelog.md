@@ -1,6 +1,6 @@
-## 26.10.4f3c04b
+## 26.10.35d7c7a
 
-Preview build of upstream [26.10.4f3c04b](https://github.com/wxxsfxyzm/InstallerX-Revived/releases/tag/26.10.4f3c04b), APK versionCode 1000001571.
+Preview build of upstream [26.10.35d7c7a](https://github.com/wxxsfxyzm/InstallerX-Revived/releases/tag/26.10.35d7c7a), APK versionCode 1000001574.
 
 ---
 
@@ -13,10 +13,10 @@ Preview build of upstream [26.10.4f3c04b](https://github.com/wxxsfxyzm/Installer
 - We appreciate any feedback!
 
 **更新日志（Changelog）:**
+- i18n: Translations update from Hosted Weblate ([#870](https://github.com/wxxsfxyzm/InstallerX-Revived/pull/870)) (Weblate (bot))
+- feat: route app info intents to the uninstall flow (wxxsfxyzm)
+- feat: add AOSP signature badges with signing key details (wxxsfxyzm)
 - i18n: Translations update from Hosted Weblate ([#854](https://github.com/wxxsfxyzm/InstallerX-Revived/pull/854)) (Weblate (bot))
 - feat: Add source stamp verification and bug fixes ([#867](https://github.com/wxxsfxyzm/InstallerX-Revived/pull/867)) (wxxsfxyzm)
-- feat: add CMF palette support for spec 2026 (wxxsfxyzm)
-- fix: cancel superseded branch ci runs (wxxsfxyzm)
-- fix: delete module source archives after successful installation (wxxsfxyzm)
 
-**Full Changelog:** [`26.09...26.10.4f3c04b`](https://github.com/wxxsfxyzm/InstallerX-Revived/compare/26.09...26.10.4f3c04b)
+**Full Changelog:** [`26.09...26.10.35d7c7a`](https://github.com/wxxsfxyzm/InstallerX-Revived/compare/26.09...26.10.35d7c7a)
