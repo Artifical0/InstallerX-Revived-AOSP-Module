@@ -15,6 +15,8 @@ Auto-synced Magisk / KernelSU / APatch module that installs [InstallerX Revived]
 1. Download the zip from [Releases](../../releases/latest) and flash it in Magisk / KernelSU / APatch.
 2. Reboot.
 
+New releases are announced on the Telegram channel [@ByteJuno](https://t.me/ByteJuno). 新版本发布会推送到 Telegram 频道 [@ByteJuno](https://t.me/ByteJuno)，欢迎关注。
+
 The module id is `com.android.packageinstaller`, the same as the official AOSP module, so it updates that module in place.
 
 ## Notes
