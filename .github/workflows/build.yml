@@ -2,7 +2,7 @@ name: Build module
 
 on:
   schedule:
-    - cron: '17 */2 * * *'
+    - cron: '17 */6 * * *'   # 上游大约一周一版，每 6 小时查一次足够
   workflow_dispatch:
     inputs:
       ref:
